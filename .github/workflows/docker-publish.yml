@@ -23,4 +23,4 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           push: true
-          tags: your-docker-username/discord-bot:latest
+          tags: hophamlam/halaproject-discordbot:latest
