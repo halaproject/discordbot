@@ -2,10 +2,10 @@ version: "3.8"
 
 services:
   discord-bot:
-    image: ghcr.io/yourusername/halaproject-discordbot:latest
+    image: ghcr.io/halaproject/discordbot:latest
     build:
       context: .
       dockerfile: Dockerfile
     env_file: .env
-    container_name: halaproject-discordbot
+    container_name: discordbot
     restart: unless-stopped
