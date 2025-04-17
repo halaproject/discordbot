@@ -10,8 +10,11 @@ const {
   REST,
   Routes,
   SlashCommandBuilder,
+  EmbedBuilder
 } = require("discord.js");
 const axios = require("axios"); // We'll use axios to send HTTP requests
+const fs = require('fs');
+const path = require('path');
 
 // ====== CONFIGURATION ======
 // Using environment variables for sensitive information
@@ -22,6 +25,43 @@ const TARGET_URL = process.env.TARGET_URL;
 const HTTP_USERNAME = process.env.HTTP_USERNAME;
 const HTTP_PASSWORD = process.env.HTTP_PASSWORD;
 // ===========================
+
+// Setup logging
+const LOG_DIR = path.join(__dirname, 'logs');
+if (!fs.existsSync(LOG_DIR)) {
+  fs.mkdirSync(LOG_DIR);
+}
+
+// Custom logger function
+function logger(level, message, data = null) {
+  const timestamp = new Date().toISOString();
+  let logEntry = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+  
+  if (data) {
+    // Add data but mask sensitive information
+    const safeData = JSON.parse(JSON.stringify(data));
+    if (safeData.auth) {
+      safeData.auth = { username: '***', password: '***' };
+    }
+    logEntry += `\n${JSON.stringify(safeData, null, 2)}`;
+  }
+  
+  // Log to console with color
+  const colors = {
+    info: '\x1b[32m', // Green
+    warn: '\x1b[33m', // Yellow
+    error: '\x1b[31m', // Red
+    debug: '\x1b[36m'  // Cyan
+  };
+  const resetColor = '\x1b[0m';
+  console.log(`${colors[level] || ''}${logEntry}${resetColor}`);
+  
+  // Also write to log file
+  const logFile = path.join(LOG_DIR, `${new Date().toISOString().split('T')[0]}.log`);
+  fs.appendFileSync(logFile, logEntry + '\n');
+  
+  return logEntry;
+}
 
 // Initialize Discord client
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
@@ -50,34 +90,59 @@ const rest = new REST({ version: "10" }).setToken(BOT_TOKEN);
 
 (async () => {
   try {
-    console.log("Started refreshing application (/) commands.");
+    logger('info', "Started refreshing application (/) commands");
 
     // Register commands for a specific guild (for development, faster)
     await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), {
       body: commands,
     });
 
-    console.log("Successfully reloaded application (/) commands.");
+    logger('info', "Successfully reloaded application (/) commands");
   } catch (error) {
-    console.error(error);
+    logger('error', "Failed to reload commands", error);
   }
 })();
 
 // Event: When the bot is ready
 client.once("ready", () => {
-  console.log(`🤖 Bot is online as ${client.user.tag}`);
+  logger('info', `Bot is online as ${client.user.tag}`);
+  
+  // Set bot status
+  client.user.setActivity('DeepSeek AI Research', { type: 'WATCHING' });
+});
+
+// Log when bot disconnects
+client.on('disconnect', (event) => {
+  logger('warn', `Bot disconnected with code ${event.code}`, event);
+});
+
+// Log when bot reconnects
+client.on('reconnecting', () => {
+  logger('info', 'Bot is reconnecting');
 });
 
 // Event: When a slash command is used
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isCommand()) return;
 
-  if (interaction.commandName === "research") {
+  const commandName = interaction.commandName;
+  const user = interaction.user;
+  const guild = interaction.guild;
+  
+  logger('info', `Command "${commandName}" used by ${user.tag} (${user.id}) in guild ${guild?.name || 'DM'} (${guild?.id || 'N/A'})`);
+
+  if (commandName === "research") {
     try {
+      // Show that the bot is thinking
+      await interaction.deferReply();
+      
       // Get parameters from the interaction
       const trend_topic = interaction.options.getString("trend_topic");
       const count = interaction.options.getInteger("count") || 1;
       const lang = interaction.options.getString("lang") || "english";
+
+      // Log the parameters
+      logger('debug', "Research parameters", { trend_topic, count, lang });
 
       // Prepare request body
       const requestBody = {
@@ -86,6 +151,11 @@ client.on("interactionCreate", async (interaction) => {
         lang: lang
       };
 
+      // Log request attempt
+      logger('debug', `Sending HTTP request to ${TARGET_URL}`);
+      
+      const startTime = Date.now();
+      
       // Send HTTP POST request with basic auth
       const response = await axios.post(
         TARGET_URL,
@@ -97,22 +167,72 @@ client.on("interactionCreate", async (interaction) => {
           },
         }
       );
+      
+      const responseTime = Date.now() - startTime;
+      
+      // Log successful response
+      logger('info', `API request successful - Status: ${response.status}, Time: ${responseTime}ms`);
 
-      // Reply to the user with the status of the request and sent data
-      await interaction.reply(
-        `✅ Research request sent! Status: ${response.status}\nParameters: trend_topic="${trend_topic}", count=${count}, lang="${lang}"`
-      );
+      // Create a simpler embed for successful response
+      const successEmbed = new EmbedBuilder()
+        .setColor(0x00FF00) // Green color
+        .setTitle('✅ Research Request Sent to DeepSeek AI')
+        .addFields(
+          { name: 'Trend Topic', value: trend_topic, inline: true },
+          { name: 'Count', value: count.toString(), inline: true }
+        );
+      
+      // Only add language field if not the default English
+      if (lang.toLowerCase() !== 'english') {
+        successEmbed.addFields({ name: 'Language', value: lang, inline: true });
+      }
+        
+      // Reply to the user with the embed
+      await interaction.editReply({ embeds: [successEmbed] });
+      
+      // Log the response sent to user
+      logger('debug', 'Response sent to user');
+      
     } catch (error) {
-      console.error("Error sending research request:", error);
-
-      // Reply to the user with error information
-      await interaction.reply({
-        content: `❌ Failed to send research request: ${error.message}`,
-        ephemeral: true,
+      // Log the error with detailed information
+      logger('error', 'Error sending research request', {
+        error: {
+          message: error.message,
+          stack: error.stack,
+          code: error.code,
+          response: error.response ? {
+            status: error.response.status,
+            statusText: error.response.statusText,
+            data: error.response.data
+          } : 'No response'
+        }
       });
+
+      // Create simple embed for error response
+      const errorEmbed = new EmbedBuilder()
+        .setColor(0xFF0000) // Red color
+        .setTitle('❌ Research Request Failed')
+        .setDescription(error.message || 'Unknown error');
+      
+      // Reply to the user with error embed
+      await interaction.editReply({ embeds: [errorEmbed], ephemeral: true });
     }
   }
 });
 
+// Handle process errors
+process.on('uncaughtException', (error) => {
+  logger('error', 'Uncaught Exception', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger('error', 'Unhandled Rejection', { reason, promise });
+});
+
+// Log startup
+logger('info', 'Bot starting up');
+
 // Log in to Discord
-client.login(BOT_TOKEN);
+client.login(BOT_TOKEN)
+  .then(() => logger('info', 'Logged in successfully'))
+  .catch(error => logger('error', 'Failed to login', error));
