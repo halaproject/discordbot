@@ -45,6 +45,7 @@ jobs:
             type=semver,pattern={{major}}
             type=sha
             latest
+            ## test gh actions
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
