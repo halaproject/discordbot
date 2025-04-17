@@ -174,22 +174,24 @@ client.on("interactionCreate", async (interaction) => {
       logger('info', `API request successful - Status: ${response.status}, Time: ${responseTime}ms`);
 
       // Create a simpler embed for successful response
+      // Build success embed with all enhancements
+      const timeTakenSeconds = Math.round(responseTime / 1000);
+      const summaryLine = `📊 count: ${count} | time: ${timeTakenSeconds}s | lang: ${lang}`;
+      const NOCODB_URL = "https://nocodb.hophamlam.com/dashboard/#/nc/gallery/21715fa0-2dfa-4fe6-a46d-0cc02de7944c";
+      
       const successEmbed = new EmbedBuilder()
-        .setColor(0x00FF00) // Green color
-        .setTitle('✅ Research Request Sent to DeepSeek AI')
-        .addFields(
-          { name: 'Trend Topic', value: trend_topic, inline: true },
-          { name: 'Count', value: count.toString(), inline: true }
+        .setColor(0x00FF00)
+        .setTitle('✅ Research Completed by DeepSeek AI')
+        .setDescription(
+          `**Trend Topic**\n${trend_topic}\n\n` +
+          `${summaryLine}\n` +
+          `🔗 [View Results](${NOCODB_URL})`
         );
       
-      // Only add language field if not the default English
-      if (lang.toLowerCase() !== 'english') {
-        successEmbed.addFields({ name: 'Language', value: lang, inline: true });
-      }
-        
-      // Reply to the user with the embed
+
+      // Send reply
       await interaction.editReply({ embeds: [successEmbed] });
-      
+
       // Log the response sent to user
       logger('debug', 'Response sent to user');
       
