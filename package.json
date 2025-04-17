@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": ["discord", "bot", "nodejs", "deepseek"],
   "author": "",
   "license": "ISC",
   "dependencies": {
@@ -13,5 +14,5 @@
     "discord.js": "^14.18.0",
     "dotenv": "^16.4.7"
   },
-  "description": ""
+  "description": "halaproject-discordbot - A Discord bot for sending research parameters to DeepSeek AI API"
 }

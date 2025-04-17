@@ -26,11 +26,23 @@ const HTTP_PASSWORD = process.env.HTTP_PASSWORD;
 // Initialize Discord client
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-// Define the /start command
+// Define commands
 const commands = [
   new SlashCommandBuilder()
-    .setName("start")
-    .setDescription("Send HTTP request with Basic Auth to example.com"),
+    .setName("research")
+    .setDescription("Send research parameters to target URL")
+    .addStringOption(option =>
+      option.setName("trend_topic")
+        .setDescription("The trend topic to research")
+        .setRequired(true))
+    .addIntegerOption(option =>
+      option.setName("count")
+        .setDescription("The count parameter (default: 1)")
+        .setRequired(false))
+    .addStringOption(option =>
+      option.setName("lang")
+        .setDescription("The language parameter (default: english)")
+        .setRequired(false)),
 ].map((command) => command.toJSON());
 
 // Register the slash command with Discord API
@@ -60,12 +72,24 @@ client.once("ready", () => {
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isCommand()) return;
 
-  if (interaction.commandName === "start") {
+  if (interaction.commandName === "research") {
     try {
-      // Send HTTP POST request with Basic Auth
+      // Get parameters from the interaction
+      const trend_topic = interaction.options.getString("trend_topic");
+      const count = interaction.options.getInteger("count") || 1;
+      const lang = interaction.options.getString("lang") || "english";
+
+      // Prepare request body
+      const requestBody = {
+        trend_topic: trend_topic,
+        count: count,
+        lang: lang
+      };
+
+      // Send HTTP POST request with basic auth
       const response = await axios.post(
         TARGET_URL,
-        {},
+        requestBody,
         {
           auth: {
             username: HTTP_USERNAME,
@@ -74,16 +98,16 @@ client.on("interactionCreate", async (interaction) => {
         }
       );
 
-      // Reply to the user with the status of the request
+      // Reply to the user with the status of the request and sent data
       await interaction.reply(
-        `✅ HTTP request sent! Status: ${response.status}`
+        `✅ Research request sent! Status: ${response.status}\nParameters: trend_topic="${trend_topic}", count=${count}, lang="${lang}"`
       );
     } catch (error) {
-      console.error("Error sending HTTP request:", error);
+      console.error("Error sending research request:", error);
 
       // Reply to the user with error information
       await interaction.reply({
-        content: `❌ Failed to send HTTP request: ${error.message}`,
+        content: `❌ Failed to send research request: ${error.message}`,
         ephemeral: true,
       });
     }
